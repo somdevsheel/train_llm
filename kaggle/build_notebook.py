@@ -6,6 +6,8 @@ Tasks:
   train    (2x T4)     train; auto-finds train.bin and an optional ckpt.pt to resume under /kaggle/input
   continue (2x T4)     standalone continued pretraining: downloads a full ckpt.pt from --base_url,
                        re-tokenizes the same data, skips the steps already trained on (--offset_iters)
+  resume   (2x T4)     standalone resume of an interrupted continue run: downloads its ckpt.pt from
+                       --base_url and finishes the same LR schedule on the next unseen data
   sft      (2x T4)     standalone chat fine-tune: downloads base model.pt from --base_url, builds
                        smol-smoltalk SFT data, fine-tunes within --session_hours
 
@@ -154,6 +156,48 @@ print(f'prep took {{elapsed_h * 60:.0f}} min -> training budget {{BUDGET}} h')
                  "!python scripts/generate.py --ckpt /kaggle/working/run/model.pt --num_samples 2 --seed 0 "
                  "--prompt 'Photosynthesis is the process' | tee -a /kaggle/working/samples.txt"),
         ]
+    if a.task == "resume":
+        # pick up an interrupted continue/train-standalone run: same schedule, next unseen batch
+        assert a.base_url and a.offset_iters, "--base_url (the interrupted run's ckpt.pt) and --offset_iters are required"
+        log_dl = (f' && curl -sSfL -o /kaggle/working/run/log.jsonl "{a.log_url}"' if a.log_url else "")
+        return [
+            code(f"""
+!mkdir -p /kaggle/working/run && curl -sSfL -o /kaggle/working/run/ckpt.pt "{a.base_url}"{log_dl} && ls -la /kaggle/working/run
+import torch
+ck = torch.load('/kaggle/working/run/ckpt.pt', map_location='cpu', weights_only=False)
+saved = ck['args']
+print('interrupted run: iter', ck['iter'], '/', ck['max_iters'], '| best val', ck['best_val'],
+      '| step tokens', ck['step_tokens'], '| lr', saved['lr'], '| data offset', saved['data_offset_iters'])
+assert saved['data_offset_iters'] == {a.offset_iters}, 'checkpoint was trained with a different data offset'
+assert ck['iter'] < ck['max_iters'], 'this run already finished; nothing to resume'
+LEFT = ck['max_iters'] - ck['iter']
+print(f'{{LEFT}} steps left ({{LEFT * ck["step_tokens"] / 1e9:.2f}}B tokens)')
+del ck
+"""),
+            code(f"!python scripts/prepare_data.py --dataset {a.dataset} --max_tokens {a.max_tokens} "
+                 f"--out_dir /tmp/data --cache_dir /tmp/hf_cache"),
+            code(f"""
+import json
+meta = json.load(open('/tmp/data/meta.json'))
+print(meta)
+assert not {a.expect_docs} or meta['docs'] == {a.expect_docs}, 'data differs from the original run; resuming would repeat/skip data'
+print('data matches the original run')
+"""),
+            code(f"""
+import time
+elapsed_h = (time.time() - NB_START) / 3600
+BUDGET = round({a.session_hours} - elapsed_h, 2)
+print(f'prep took {{elapsed_h * 60:.0f}} min -> training limit {{BUDGET}} h (checkpoints and stops cleanly if not done)')
+"""),
+            # schedule, batch geometry, seed and data offset come from the checkpoint (train.py RESUME_KEEP)
+            code(f'!torchrun --standalone --nproc_per_node=gpu scripts/train.py --resume /kaggle/working/run/ckpt.pt '
+                 f'--data_dir /tmp/data --out_dir /kaggle/working/run --log_every 10 '
+                 f'--time_limit_hours {{BUDGET}}'),
+            code("!python scripts/generate.py --ckpt /kaggle/working/run/model.pt --num_samples 2 --seed 0 "
+                 "--prompt 'The most important thing to understand about science is' | tee /kaggle/working/samples.txt\n"
+                 "!python scripts/generate.py --ckpt /kaggle/working/run/model.pt --num_samples 2 --seed 0 "
+                 "--prompt 'Photosynthesis is the process' | tee -a /kaggle/working/samples.txt"),
+        ]
     if a.task == "sft":
         assert a.base_url, "--base_url (signed URL of the base model.pt) is required"
         chat = ("!python scripts/generate.py --ckpt /kaggle/working/sft/model.pt --chat --num_samples 2 --seed 0 "
@@ -183,10 +227,11 @@ print(f'prep took {{elapsed_h * 60:.0f}} min -> training budget {{BUDGET}} h')
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("task", choices=["prepare", "bench", "train", "train-standalone", "continue", "sft"])
+    p.add_argument("task", choices=["prepare", "bench", "train", "train-standalone", "continue", "resume", "sft"])
     p.add_argument("--offset_iters", type=int, default=0, help="continue: steps the base run already trained")
     p.add_argument("--expect_docs", type=int, default=0, help="continue: doc count of the base run's data, to verify")
-    p.add_argument("--base_url", default="", help="sft: URL to download the base model.pt from")
+    p.add_argument("--base_url", default="", help="continue/resume: URL of a full ckpt.pt; sft: URL of the base model.pt")
+    p.add_argument("--log_url", default="", help="resume: URL of the interrupted run's log.jsonl, appended to")
     p.add_argument("--shards", type=int, default=2, help="sft: smol-smoltalk train shards (~120k rows each)")
     p.add_argument("--session_hours", type=float, default=11.2, help="train-standalone: total wall-clock to use")
     p.add_argument("--dataset", default="fineweb-edu")
@@ -198,7 +243,7 @@ def main():
     a = p.parse_args()
 
     cells = [md(f"# kaggle-llm: `{a.task}`\nGenerated by `kaggle/build_notebook.py` from the local project.")]
-    embed = a.task in ("prepare", "train-standalone", "continue", "sft") or a.embed_code
+    embed = a.task in ("prepare", "train-standalone", "continue", "resume", "sft") or a.embed_code
     cells += (embedded_code_cells() if embed else loaded_code_cells()) + task_cells(a)
     nb = {"cells": cells, "nbformat": 4, "nbformat_minor": 4,
           "metadata": {"kernelspec": {"name": "python3", "display_name": "Python 3", "language": "python"},

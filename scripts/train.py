@@ -31,6 +31,11 @@ CHAT_PROMPTS = ["What is photosynthesis? Explain it simply.",
                 "Write a short poem about the ocean."]
 
 
+# settings a resumed run takes from its checkpoint: LR schedule, batch geometry, data order
+RESUME_KEEP = ["lr", "min_lr_ratio", "warmup_iters", "weight_decay", "grad_clip", "batch_tokens",
+               "micro_batch", "data_offset_iters", "seed", "eval_every", "ckpt_every"]
+
+
 def get_args():
     p = argparse.ArgumentParser()
     p.add_argument("--preset", default="124m", choices=list(PRESETS))
@@ -116,6 +121,12 @@ def main():
         ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
         cfg = GPTConfig(**ckpt["model_config"])
         log(f"Resuming from {ckpt_path} at iter {ckpt['iter']}")
+        # the schedule and the data order must match the interrupted run, whatever flags were passed now
+        saved = ckpt.get("args", {})
+        for k in RESUME_KEEP:
+            if k in saved and getattr(a, k) != saved[k]:
+                log(f"  resume: {k} = {saved[k]} (from checkpoint; ignoring {getattr(a, k)})")
+                setattr(a, k, saved[k])
     else:
         if a.resume and a.resume != "auto":
             raise FileNotFoundError(ckpt_path)
