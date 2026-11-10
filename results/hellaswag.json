@@ -1,0 +1,26 @@
+[
+ {
+  "model": "hf_export/base",
+  "examples": 10042,
+  "acc_norm": 0.27106154152559253,
+  "acc": 0.27165903206532566,
+  "params_M": 123.6,
+  "seconds": 884
+ },
+ {
+  "model": "hf_export/sft",
+  "examples": 10042,
+  "acc_norm": 0.2695678151762597,
+  "acc": 0.2729535949014141,
+  "params_M": 123.6,
+  "seconds": 1206
+ },
+ {
+  "model": "openai-community/gpt2",
+  "examples": 10042,
+  "acc_norm": 0.2954590718980283,
+  "acc": 0.28579964150567616,
+  "params_M": 124.4,
+  "seconds": 1021
+ }
+]

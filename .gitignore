@@ -1,0 +1,26 @@
+# model weights and exports (published on Hugging Face instead)
+checkpoints/
+hf_export/
+*.pt
+*.onnx
+*.safetensors
+
+# datasets (rebuilt by scripts/prepare_data.py / prepare_sft.py)
+data/
+*.bin
+
+# generated Kaggle notebooks: rebuilt by kaggle/build_notebook.py and may embed signed download URLs
+kaggle/*.ipynb
+
+# local web app: conversation logs, dependencies, build output
+webapp/logs/
+webapp/frontend/node_modules/
+webapp/frontend/dist/
+
+# python / editor
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.venv/
+.env
+.DS_Store
