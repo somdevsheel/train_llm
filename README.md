@@ -1,6 +1,6 @@
 # train_llm: a 124M-parameter LLM trained from scratch on free Kaggle GPUs
 
-A LLaMA-style language model written from scratch in PyTorch, pretrained on FineWeb-Edu and fine-tuned into a chat assistant, using only Kaggle's free 2x T4 GPUs (about 12.7 GPU-hours, $0).
+A LLaMA-style language model written from scratch in PyTorch, pretrained on FineWeb-Edu and fine-tuned into a chat assistant, using only Kaggle's free 2x T4 GPUs (about 23 hours of 2x T4 time, $0).
 
 - **Try it in your browser:** [kaggle-llm-124m-chat-demo](https://huggingface.co/spaces/somdevsheel/kaggle-llm-124m-chat-demo) (runs locally in the page via Transformers.js)
 - **Models:** [kaggle-llm-124m-chat](https://huggingface.co/somdevsheel/kaggle-llm-124m-chat) · [kaggle-llm-124m-base](https://huggingface.co/somdevsheel/kaggle-llm-124m-base) (standard `LlamaForCausalLM`, loads with plain `transformers`)
@@ -9,10 +9,11 @@ A LLaMA-style language model written from scratch in PyTorch, pretrained on Fine
 
 | Stage | Data | Compute | Result |
 |---|---|---|---|
-| Pretraining | 0.98B tokens of [FineWeb-Edu](https://huggingface.co/datasets/HuggingFaceFW/fineweb-edu) | 1,865 steps × 524K tokens, 10.9 h on 2x T4 | val loss 10.97 → **3.43** (perplexity 31) |
-| Chat fine-tuning (SFT) | 226K conversations from [smol-smoltalk](https://huggingface.co/datasets/HuggingFaceTB/smol-smoltalk) | 2,442 steps × 65K tokens, 1.7 h on 2x T4 | assistant-token val loss 2.79 → **1.61** |
+| Pretraining | 0.98B tokens of [FineWeb-Edu](https://huggingface.co/datasets/HuggingFaceFW/fineweb-edu) | 1,865 steps × 524K tokens, 10.9 h on 2x T4 | val loss 10.97 → 3.43 (perplexity 31) |
+| Continued pretraining | 0.94B more unseen FineWeb-Edu tokens (1.92B total) | 1,796 steps × 524K tokens, ~10 h on 2x T4, peak LR 6e-4 | val loss 3.43 → **3.30** (perplexity 27) |
+| Chat fine-tuning (SFT) | 226K conversations from [smol-smoltalk](https://huggingface.co/datasets/HuggingFaceTB/smol-smoltalk) | 2,442 steps × 65K tokens, 1.7 h on 2x T4 | assistant-token val loss 2.65 → **1.54** (was 1.61 from the 0.98B-token base) |
 
-HellaSwag (validation, 10,042 examples, length-normalized), scored with the same script for every model:
+HellaSwag (validation, 10,042 examples, length-normalized), scored with the same script for every model. *These scores are for the previous release (0.98B-token base); re-evaluation of the current models is in progress.*
 
 | Model | Training tokens | HellaSwag |
 |---|---|---|
@@ -21,7 +22,7 @@ HellaSwag (validation, 10,042 examples, length-normalized), scored with the same
 | This model (chat) | + 150M SFT | 27.0% |
 | GPT-2 small (OpenAI, 124M) | ~10B (approx.) | 29.5% |
 
-The model follows the chat format and writes short correct code (e.g. string reversal, prime checks), but with ~8 training tokens per parameter (compute-optimal is ~20) it often states wrong facts confidently.
+The model follows the chat format and writes short correct code (e.g. string reversal, prime checks), but with ~16 training tokens per parameter (compute-optimal is ~20) it often states wrong facts confidently.
 
 ## Architecture
 
