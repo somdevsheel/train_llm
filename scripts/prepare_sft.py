@@ -6,8 +6,10 @@ Writes to --out_dir:
   meta.json
 
 Conversations longer than a block are cut at a turn boundary (must keep >= 1 assistant turn).
+--identity N adds N synthetic "who are you?" conversations (src/llm/identity.py) to train only,
+so val stays the first --val_rows conversations of the dataset and val loss is comparable across runs.
 
-    python scripts/prepare_sft.py --out_dir data/sft --max_rows 200000
+    python scripts/prepare_sft.py --out_dir data/sft --max_rows 200000 --identity 1000
 """
 import argparse
 import glob
@@ -21,6 +23,7 @@ import tiktoken
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src"))
 from llm.chat import EOS, encode_turns  # noqa: E402
+from llm.identity import identity_conversations  # noqa: E402
 
 
 def iter_rows(a):
@@ -95,6 +98,7 @@ def main():
     p.add_argument("--shards", type=int, default=2, help="train parquet shards to download")
     p.add_argument("--max_rows", type=int, default=0)
     p.add_argument("--val_rows", type=int, default=2000)
+    p.add_argument("--identity", type=int, default=0, help="synthetic identity conversations added to train")
     p.add_argument("--block_size", type=int, default=1024)
     p.add_argument("--out_dir", default="data/sft")
     p.add_argument("--cache_dir", default="data/hf_cache")
@@ -120,9 +124,15 @@ def main():
         (val if kept <= a.val_rows else train).add(*ex)
         if n % 20000 == 0:
             print(f"{n:,} rows | {train.blocks:,} train blocks | {time.time() - t0:.0f}s", flush=True)
+    ident = 0
+    for msgs in identity_conversations(a.identity):
+        ex = fit(encode_turns(enc, msgs), block)
+        if ex is not None:
+            train.add(*ex)
+            ident += 1
     val.close()
     train.close()
-    meta = {"repo": a.repo, "rows_read": n, "rows_kept": kept, "rows_truncated": cut,
+    meta = {"repo": a.repo, "rows_read": n, "rows_kept": kept, "rows_truncated": cut, "identity_rows": ident,
             "block_size": a.block_size, "train_blocks": train.blocks, "val_blocks": val.blocks,
             "train_tokens": train.blocks * block, "fill": round(train.used / max(1, train.blocks * block), 3),
             "train_target_tokens": train.targets,

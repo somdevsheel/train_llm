@@ -24,7 +24,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RUN_DIR = "/tmp/kaggle-llm"          # where code runs inside Kaggle
 SAVED_CODE = "/kaggle/working/code"  # prepare notebook also saves the code as output, so
                                      # bench/train notebooks can load it from /kaggle/input
-FILES = ["src/llm/__init__.py", "src/llm/config.py", "src/llm/model.py", "src/llm/data.py", "src/llm/chat.py",
+FILES = ["src/llm/__init__.py", "src/llm/config.py", "src/llm/model.py", "src/llm/data.py", "src/llm/chat.py", "src/llm/identity.py",
          "scripts/prepare_data.py", "scripts/prepare_sft.py", "scripts/train.py", "scripts/generate.py"]
 
 
@@ -203,14 +203,15 @@ print(f'prep took {{elapsed_h * 60:.0f}} min -> training limit {{BUDGET}} h (che
         chat = ("!python scripts/generate.py --ckpt /kaggle/working/sft/model.pt --chat --num_samples 2 --seed 0 "
                 "--tokens 250 --prompt {q!r} {tee} /kaggle/working/samples.txt")
         qs = ["What is photosynthesis? Explain it simply.", "Give me three tips for staying focused while studying.",
-              "Write a Python function that checks whether a number is prime.", "Write a short poem about the ocean."]
+              "Write a Python function that checks whether a number is prime.", "Write a short poem about the ocean.", "Who are you and who made you?"]
         return [
             code(f"""
 !mkdir -p /tmp/base && curl -sSfL -o /tmp/base/model.pt "{a.base_url}" && ls -la /tmp/base
 import torch
 print(torch.load('/tmp/base/model.pt', map_location='cpu', weights_only=False)['model_config'])
 """),
-            code(f"!python scripts/prepare_sft.py --shards {a.shards} --out_dir /tmp/sft --cache_dir /tmp/hf_cache"),
+            code(f"!python scripts/prepare_sft.py --shards {a.shards} --identity {a.identity} "
+                 f"--out_dir /tmp/sft --cache_dir /tmp/hf_cache"),
             code(f"""
 import time
 elapsed_h = (time.time() - NB_START) / 3600
@@ -233,6 +234,7 @@ def main():
     p.add_argument("--base_url", default="", help="continue/resume: URL of a full ckpt.pt; sft: URL of the base model.pt")
     p.add_argument("--log_url", default="", help="resume: URL of the interrupted run's log.jsonl, appended to")
     p.add_argument("--shards", type=int, default=2, help="sft: smol-smoltalk train shards (~120k rows each)")
+    p.add_argument("--identity", type=int, default=0, help="sft: synthetic identity conversations to add")
     p.add_argument("--session_hours", type=float, default=11.2, help="train-standalone: total wall-clock to use")
     p.add_argument("--dataset", default="fineweb-edu")
     p.add_argument("--max_tokens", default="3e9")

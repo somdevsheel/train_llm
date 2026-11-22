@@ -11,7 +11,7 @@ A LLaMA-style language model written from scratch in PyTorch, pretrained on Fine
 |---|---|---|---|
 | Pretraining | 0.98B tokens of [FineWeb-Edu](https://huggingface.co/datasets/HuggingFaceFW/fineweb-edu) | 1,865 steps × 524K tokens, 10.9 h on 2x T4 | val loss 10.97 → 3.43 (perplexity 31) |
 | Continued pretraining | 0.94B more unseen FineWeb-Edu tokens (1.92B total) | 1,796 steps × 524K tokens, ~10 h on 2x T4, peak LR 6e-4 | val loss 3.43 → **3.30** (perplexity 27) |
-| Chat fine-tuning (SFT) | 226K conversations from [smol-smoltalk](https://huggingface.co/datasets/HuggingFaceTB/smol-smoltalk) | 2,442 steps × 65K tokens, 1.7 h on 2x T4 | assistant-token val loss 2.65 → **1.54** (was 1.61 from the 0.98B-token base) |
+| Chat fine-tuning (SFT) | 451K conversations from [smol-smoltalk](https://huggingface.co/datasets/HuggingFaceTB/smol-smoltalk) (full set) + 1K synthetic identity conversations | 4,578 steps × 65K tokens, 3.2 h on 2x T4 | assistant-token val loss 2.65 → **1.46** (v2: 1.54 on half the data; v1: 1.61 from the 0.98B-token base) |
 
 HellaSwag (validation, 10,042 examples, length-normalized), scored with the same script for every model. *These scores are for the previous release (0.98B-token base); re-evaluation of the current models is in progress.*
 
