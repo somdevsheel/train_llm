@@ -45,6 +45,9 @@ def get_args():
     p.add_argument("--resume", default="", help="ckpt path, or 'auto' for <out_dir>/ckpt.pt")
     p.add_argument("--init_from", default="", help="start from these weights (model.pt) with a fresh "
                    "optimizer/schedule, e.g. for fine-tuning; architecture comes from the file")
+    p.add_argument("--block_size", type=int, default=0,
+                   help="override context length (e.g. 4096 with --init_from to extend a 1024 model)")
+    p.add_argument("--rope_theta", type=float, default=0, help="override RoPE base (raise it when extending context)")
     p.add_argument("--init_optimizer", action="store_true",
                    help="with --init_from a full ckpt.pt: also load its AdamW moments (smoother continued pretraining)")
     p.add_argument("--data_offset_iters", type=int, default=0,
@@ -137,6 +140,11 @@ def main():
             log(f"Initializing weights from {a.init_from}")
         else:
             cfg = get_config(a.preset)
+        if a.block_size or a.rope_theta:
+            from dataclasses import replace
+            cfg = replace(cfg, **({"block_size": a.block_size} if a.block_size else {}),
+                          **({"rope_theta": a.rope_theta} if a.rope_theta else {}))
+            log(f"Config override: block_size={cfg.block_size}, rope_theta={cfg.rope_theta:g}")
 
     # ---------------- batch geometry ----------------
     tokens_per_micro = a.micro_batch * cfg.block_size * world
