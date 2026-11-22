@@ -10,7 +10,7 @@ These are templated from FACTS; edit FACTS to change what the model says about i
 import random
 
 FACTS = {
-    "name": "kaggle-llm-124m-chat",
+    "name": "Prajna AI",
     "creator": "somdevsheel",
     "params": "124 million",
     "arch": "LLaMA-style decoder-only transformer",

@@ -1,6 +1,6 @@
 import { pipeline, TextStreamer } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.0.2';
 
-const MODEL = 'somdevsheel/kaggle-llm-124m-chat';
+const MODEL = 'somdevsheel/prajna-ai-124m-chat';
 let generator = null;
 
 async function load() {

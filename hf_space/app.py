@@ -1,4 +1,4 @@
-"""Chat demo for kaggle-llm-124m-chat, a 124M model trained from scratch on free Kaggle GPUs."""
+"""Chat demo for prajna-ai-124m-chat, a 124M model trained from scratch on free Kaggle GPUs."""
 import os
 import threading
 
@@ -6,7 +6,7 @@ import gradio as gr
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, TextIteratorStreamer
 
-REPO = "somdevsheel/kaggle-llm-124m-chat"
+REPO = "somdevsheel/prajna-ai-124m-chat"
 CONTEXT = 1024
 
 torch.set_num_threads(os.cpu_count() or 2)
@@ -46,8 +46,8 @@ def respond(message, history, temperature, max_new_tokens, repetition_penalty):
 DESCRIPTION = """
 A **124M-parameter** LLaMA-style model trained **from scratch** on free Kaggle GPUs (2x T4):
 pretrained on 0.98B tokens of FineWeb-Edu, then fine-tuned on 226K chat conversations.
-[Chat model](https://huggingface.co/somdevsheel/kaggle-llm-124m-chat) ·
-[Base model](https://huggingface.co/somdevsheel/kaggle-llm-124m-base)
+[Chat model](https://huggingface.co/somdevsheel/prajna-ai-124m-chat) ·
+[Base model](https://huggingface.co/somdevsheel/prajna-ai-124m-base)
 
 It is ~1,500x smaller than frontier models: it follows instructions and writes short code,
 but it **often states wrong facts with confidence**. Don't rely on its answers.
@@ -56,7 +56,7 @@ but it **often states wrong facts with confidence**. Don't rely on its answers.
 demo = gr.ChatInterface(
     respond,
     type="messages",
-    title="kaggle-llm-124m-chat",
+    title="prajna-ai-124m-chat",
     description=DESCRIPTION,
     additional_inputs=[
         gr.Slider(0.1, 1.2, value=0.7, step=0.05, label="Temperature"),

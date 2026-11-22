@@ -2,8 +2,8 @@
 
 A LLaMA-style language model written from scratch in PyTorch, pretrained on FineWeb-Edu and fine-tuned into a chat assistant, using only Kaggle's free 2x T4 GPUs (about 23 hours of 2x T4 time, $0).
 
-- **Try it in your browser:** [kaggle-llm-124m-chat-demo](https://huggingface.co/spaces/somdevsheel/kaggle-llm-124m-chat-demo) (runs locally in the page via Transformers.js)
-- **Models:** [kaggle-llm-124m-chat](https://huggingface.co/somdevsheel/kaggle-llm-124m-chat) · [kaggle-llm-124m-base](https://huggingface.co/somdevsheel/kaggle-llm-124m-base) (standard `LlamaForCausalLM`, loads with plain `transformers`)
+- **Try it in your browser:** [prajna-ai-124m-chat-demo](https://huggingface.co/spaces/somdevsheel/prajna-ai-124m-chat-demo) (runs locally in the page via Transformers.js)
+- **Models:** [prajna-ai-124m-chat](https://huggingface.co/somdevsheel/prajna-ai-124m-chat) · [prajna-ai-124m-base](https://huggingface.co/somdevsheel/prajna-ai-124m-base) (standard `LlamaForCausalLM`, loads with plain `transformers`)
 
 ## Results
 
@@ -87,7 +87,7 @@ python scripts/eval_hellaswag.py --models hf_export/base openai-community/gpt2
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-repo = "somdevsheel/kaggle-llm-124m-chat"
+repo = "somdevsheel/prajna-ai-124m-chat"
 tok = AutoTokenizer.from_pretrained(repo)
 model = AutoModelForCausalLM.from_pretrained(repo, torch_dtype=torch.float16).to("cuda")
 
