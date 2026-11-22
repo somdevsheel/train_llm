@@ -8,11 +8,15 @@ Writes to --out_dir:
 Conversations longer than a block are cut at a turn boundary (must keep >= 1 assistant turn).
 --identity N adds N synthetic "who are you?" conversations (src/llm/identity.py) to train only,
 so val stays the first --val_rows conversations of the dataset and val loss is comparable across runs.
+--mix_repo adds a second chat dataset (e.g. sarvamai/samvaad-hi-v1) to train; with --mix_latin_only,
+conversations containing Devanagari (poorly tokenized by GPT-2 BPE) are skipped. Its first --mix_val_rows
+kept conversations go to val_mix.bin instead, a held-out set for that domain (scripts/eval_sft.py).
 
     python scripts/prepare_sft.py --out_dir data/sft --max_rows 200000 --identity 1000
 """
 import argparse
 import glob
+import re
 import json
 import os
 import sys
@@ -26,15 +30,19 @@ from llm.chat import EOS, encode_turns  # noqa: E402
 from llm.identity import identity_conversations  # noqa: E402
 
 
-def iter_rows(a):
+DEVANAGARI = re.compile(r"[\u0900-\u097F]")
+
+
+def iter_rows(a, repo=None, parquet="", shards=None):
     import pyarrow.parquet as pq
-    if a.parquet:
-        files = sorted(glob.glob(a.parquet))
+    repo, shards = repo or a.repo, shards or a.shards
+    if parquet:
+        files = sorted(glob.glob(parquet))
     else:
         from huggingface_hub import HfApi, hf_hub_download
-        names = sorted(f for f in HfApi().list_repo_files(a.repo, repo_type="dataset")
+        names = sorted(f for f in HfApi().list_repo_files(repo, repo_type="dataset")
                        if f.startswith("data/train") and f.endswith(".parquet"))
-        files = [hf_hub_download(a.repo, f, repo_type="dataset", local_dir=a.cache_dir) for f in names[:a.shards]]
+        files = [hf_hub_download(repo, f, repo_type="dataset", local_dir=a.cache_dir) for f in names[:shards]]
     print(f"{len(files)} parquet files", flush=True)
     for f in files:
         for batch in pq.ParquetFile(f).iter_batches(batch_size=4096, columns=["messages"]):
@@ -99,6 +107,12 @@ def main():
     p.add_argument("--max_rows", type=int, default=0)
     p.add_argument("--val_rows", type=int, default=2000)
     p.add_argument("--identity", type=int, default=0, help="synthetic identity conversations added to train")
+    p.add_argument("--mix_repo", default="", help="second chat dataset added to train (same messages format)")
+    p.add_argument("--mix_parquet", default="", help="glob of local parquet files for the mix dataset")
+    p.add_argument("--mix_shards", type=int, default=8)
+    p.add_argument("--mix_max_rows", type=int, default=0)
+    p.add_argument("--mix_val_rows", type=int, default=0, help="held out to val_mix.bin")
+    p.add_argument("--mix_latin_only", action="store_true", help="skip conversations containing Devanagari")
     p.add_argument("--block_size", type=int, default=1024)
     p.add_argument("--out_dir", default="data/sft")
     p.add_argument("--cache_dir", default="data/hf_cache")
@@ -110,7 +124,7 @@ def main():
     val = Packer(block, os.path.join(a.out_dir, "val"))
     train = Packer(block, os.path.join(a.out_dir, "train"))
     t0, n, kept, cut = time.time(), 0, 0, 0
-    for msgs in iter_rows(a):
+    for msgs in iter_rows(a, parquet=a.parquet):
         if a.max_rows and n >= a.max_rows:
             break
         n += 1
@@ -124,6 +138,27 @@ def main():
         (val if kept <= a.val_rows else train).add(*ex)
         if n % 20000 == 0:
             print(f"{n:,} rows | {train.blocks:,} train blocks | {time.time() - t0:.0f}s", flush=True)
+    mix = {"read": 0, "kept": 0, "skipped_script": 0, "truncated": 0}
+    if a.mix_repo or a.mix_parquet:
+        val_mix = Packer(block, os.path.join(a.out_dir, "val_mix")) if a.mix_val_rows else None
+        for msgs in iter_rows(a, repo=a.mix_repo, parquet=a.mix_parquet, shards=a.mix_shards):
+            if a.mix_max_rows and mix["read"] >= a.mix_max_rows:
+                break
+            mix["read"] += 1
+            if a.mix_latin_only and any(DEVANAGARI.search(m["content"]) for m in msgs):
+                mix["skipped_script"] += 1
+                continue
+            turns = encode_turns(enc, msgs)
+            ex = fit(turns, block)
+            if ex is None:
+                continue
+            mix["truncated"] += len(ex[0]) < sum(len(t) for t, _ in turns)
+            mix["kept"] += 1
+            (val_mix if val_mix and mix["kept"] <= a.mix_val_rows else train).add(*ex)
+        if val_mix:
+            val_mix.close()
+            mix["val_blocks"], mix["val_target_tokens"] = val_mix.blocks, val_mix.targets
+        print(f"mix {a.mix_repo or a.mix_parquet}: {mix}", flush=True)
     ident = 0
     for msgs in identity_conversations(a.identity):
         ex = fit(encode_turns(enc, msgs), block)
@@ -136,7 +171,7 @@ def main():
             "block_size": a.block_size, "train_blocks": train.blocks, "val_blocks": val.blocks,
             "train_tokens": train.blocks * block, "fill": round(train.used / max(1, train.blocks * block), 3),
             "train_target_tokens": train.targets,
-            "val_target_tokens": val.targets}
+            "val_target_tokens": val.targets, "mix_repo": a.mix_repo or a.mix_parquet, "mix": mix}
     json.dump(meta, open(os.path.join(a.out_dir, "meta.json"), "w"), indent=1)
     print(f"Done in {time.time() - t0:.0f}s: {meta}", flush=True)
 
