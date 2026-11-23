@@ -1,10 +1,14 @@
 import { pipeline, TextStreamer } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.0.2';
 
 const MODEL = 'somdevsheel/prajna-ai-124m-chat';
+// pin the model commit: Transformers.js caches files by URL, so a fixed 'main' URL keeps
+// serving old weights from the browser cache after the repo is updated. Bump on each release.
+const REVISION = '1d3845f0df6cdba0fedfc80c96d0a4f416bae64a'; // v5
 let generator = null;
 
 async function load() {
   generator = await pipeline('text-generation', MODEL, {
+    revision: REVISION,
     dtype: 'q8',
     device: 'wasm',
     progress_callback: (p) => self.postMessage({ type: 'progress', data: p }),
@@ -34,9 +38,9 @@ async function load() {
   self.postMessage({ type: 'ready' });
 }
 
-// keep the prompt inside the 1024-token context: drop the oldest turns first
+// keep the prompt inside the 4096-token context: drop the oldest turns first
 function fit(messages, maxNew) {
-  const budget = 1024 - maxNew;
+  const budget = 4096 - maxNew;
   let msgs = messages.slice();
   while (msgs.length > 1) {
     const ids = generator.tokenizer.apply_chat_template(msgs, { add_generation_prompt: true, tokenize: true, return_tensor: false });

@@ -40,7 +40,7 @@
 <body>
 <main>
   <h1>Prajna AI (124M) chat</h1>
-  <p class="sub">A 124M-parameter LLaMA-style model trained <b>from scratch</b> on free Kaggle GPUs: pretrained on 1.92B tokens of FineWeb-Edu, then fine-tuned on 451K chat conversations.
+  <p class="sub">A 124M-parameter LLaMA-style model trained <b>from scratch</b> on free Kaggle GPUs: pretrained on 1.92B tokens of FineWeb-Edu plus 580M tokens of India-focused text (4K context), then fine-tuned on 485K English and Hinglish chat conversations.
     It runs entirely in your browser. <a href="https://huggingface.co/somdevsheel/prajna-ai-124m-chat">Model card</a></p>
   <p class="warn">It follows instructions and writes short code, but it often states wrong facts with confidence. Don't rely on its answers.</p>
   <div id="status">Loading the model (163 MB, cached after the first visit)…</div>
@@ -51,6 +51,8 @@
     <button type="button">What is photosynthesis? Explain it simply.</button>
     <button type="button">Give me three tips for staying focused while studying.</button>
     <button type="button">Write a short poem about the ocean.</button>
+    <button type="button">Tumhara naam kya hai?</button>
+    <button type="button">Tell me about the festival of Diwali.</button>
   </div>
   <details>
     <summary>Settings</summary>
