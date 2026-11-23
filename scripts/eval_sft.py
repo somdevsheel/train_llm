@@ -21,6 +21,9 @@ def main():
     p.add_argument("--ckpt", nargs="+", required=True)
     p.add_argument("--data", required=True)
     p.add_argument("--batch", type=int, default=8)
+    p.add_argument("--block", type=int, default=0,
+                   help="packed block size of --data (default: the model's block_size); lets a 4096-context "
+                        "model be scored on 1024-packed data")
     a = p.parse_args()
     dev = "cuda" if torch.cuda.is_available() else "cpu"
     data = np.memmap(a.data, dtype=np.uint16, mode="r")
@@ -31,7 +34,8 @@ def main():
         model = GPT(cfg)
         model.load_state_dict({k: v.float() if v.is_floating_point() else v for k, v in ck["model"].items()})
         model.to(dev).eval()
-        S = cfg.block_size + 1
+        S = (a.block or cfg.block_size) + 1
+        assert S - 1 <= cfg.block_size, f"--block {S - 1} > model block_size {cfg.block_size}"
         n = len(data) // S
         tot, cnt = 0.0, 0
         with torch.no_grad(), torch.autocast(dev, dtype=torch.float16, enabled=dev == "cuda"):

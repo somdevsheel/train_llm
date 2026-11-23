@@ -1,0 +1,21 @@
+{
+ "id": "somdevsheel/prajna-sft-v5",
+ "title": "prajna-sft-v5",
+ "code_file": "prajna-sft-v5.ipynb",
+ "language": "python",
+ "kernel_type": "notebook",
+ "is_private": true,
+ "enable_gpu": true,
+ "enable_tpu": false,
+ "enable_internet": true,
+ "keywords": [],
+ "dataset_sources": [],
+ "competition_sources": [],
+ "kernel_sources": [
+  "somdevsheel/prajna-ctx4k",
+  "somdevsheel/prajna-sft",
+  "somdevsheel/kaggle-llm-sft"
+ ],
+ "model_sources": [],
+ "machine_shape": "NvidiaTeslaT4"
+}
