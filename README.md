@@ -1,6 +1,6 @@
 # train_llm: a 124M-parameter LLM trained from scratch on free Kaggle GPUs
 
-A LLaMA-style language model written from scratch in PyTorch, pretrained on FineWeb-Edu and fine-tuned into a chat assistant, using only Kaggle's free 2x T4 GPUs (about 23 hours of 2x T4 time, $0).
+A LLaMA-style language model written from scratch in PyTorch, pretrained on FineWeb-Edu, extended to a 4,096-token context on India-focused text, and fine-tuned into an English + Hinglish chat assistant (Prajna AI), using only Kaggle's free 2x T4 GPUs (about 43 hours of 2x T4 time across all runs, $0).
 
 - **Try it in your browser:** [prajna-ai-124m-chat-demo](https://huggingface.co/spaces/somdevsheel/prajna-ai-124m-chat-demo) (runs locally in the page via Transformers.js)
 - **Models:** [prajna-ai-124m-chat](https://huggingface.co/somdevsheel/prajna-ai-124m-chat) · [prajna-ai-124m-base](https://huggingface.co/somdevsheel/prajna-ai-124m-base) (standard `LlamaForCausalLM`, loads with plain `transformers`)
@@ -11,7 +11,16 @@ A LLaMA-style language model written from scratch in PyTorch, pretrained on Fine
 |---|---|---|---|
 | Pretraining | 0.98B tokens of [FineWeb-Edu](https://huggingface.co/datasets/HuggingFaceFW/fineweb-edu) | 1,865 steps × 524K tokens, 10.9 h on 2x T4 | val loss 10.97 → 3.43 (perplexity 31) |
 | Continued pretraining | 0.94B more unseen FineWeb-Edu tokens (1.92B total) | 1,796 steps × 524K tokens, ~10 h on 2x T4, peak LR 6e-4 | val loss 3.43 → **3.30** (perplexity 27) |
-| Chat fine-tuning (SFT) | 451K conversations from [smol-smoltalk](https://huggingface.co/datasets/HuggingFaceTB/smol-smoltalk) (full set) + 1K synthetic identity conversations | 4,578 steps × 65K tokens, 3.2 h on 2x T4 | assistant-token val loss 2.65 → **1.46** (v2: 1.54 on half the data; v1: 1.61 from the 0.98B-token base) |
+| Context extension | 580M tokens of India-focused English: [Sangraha](https://huggingface.co/datasets/ai4bharat/sangraha) English filtered to India topics, India-related Wikipedia, unseen FineWeb-Edu | 2,211 steps × 262K tokens, ~8.5 h on 2x T4; context 1024 → 4096, RoPE theta 10K → 100K | val loss at 4,096 tokens 5.02 → **3.25**; India val 5.11 → 2.76 |
+| Chat fine-tuning (SFT, v5) | 457K conversations from [smol-smoltalk](https://huggingface.co/datasets/HuggingFaceTB/smol-smoltalk) + 27K Latin-script Hinglish conversations from [samvaad-hi-v1](https://huggingface.co/datasets/sarvamai/samvaad-hi-v1) + 1.5K synthetic identity conversations, packed into 4,096-token blocks (99% fill) | 3,064 steps × 131K tokens, ~5.7 h on 2x T4 | assistant-token val loss 2.49 → **1.46** |
+
+Chat versions scored by `scripts/eval_sft.py` on the same held-out conversations, packed at 1,024 tokens (lower is better):
+
+| Version | Base | Fine-tuning data | smol-smoltalk val | samvaad (Hinglish) val |
+|---|---|---|---|---|
+| v3 | 1.92B FineWeb-Edu, 1K context | full smol-smoltalk + identity | 1.450 | 3.543 |
+| v4 | same | v3 + Hinglish + replay | 1.458 | 2.475 |
+| **v5 (current)** | + 4K context India extension | smol-smoltalk + Hinglish + identity | **1.415** | **2.318** |
 
 HellaSwag (validation, 10,042 examples, length-normalized), scored with the same script for every model. *These scores are for the previous release (0.98B-token base); re-evaluation of the current models is in progress.*
 
@@ -22,28 +31,30 @@ HellaSwag (validation, 10,042 examples, length-normalized), scored with the same
 | This model (chat) | + 150M SFT | 27.0% |
 | GPT-2 small (OpenAI, 124M) | ~10B (approx.) | 29.5% |
 
-The model follows the chat format and writes short correct code (e.g. string reversal, prime checks), but with ~16 training tokens per parameter (compute-optimal is ~20) it often states wrong facts confidently.
+The model follows the chat format and writes short correct code (e.g. string reversal, prime checks), replies in romanised Hinglish, and knows its own name. With ~20 pretraining tokens per parameter it still often states wrong facts confidently (e.g. right Prime Minister, wrong party), and its Hinglish is fluent-sounding but often incoherent.
 
 ## Architecture
 
-Decoder-only Transformer following the LLaMA recipe at GPT-2-small scale: 12 layers, d_model 768, 12 heads, 1024-token context, RoPE, RMSNorm (pre-norm, computed in fp32), SwiGLU feed-forward (hidden 2048), no biases, tied input/output embeddings, GPT-2 BPE tokenizer (vocab padded to 50,304). 123.6M parameters.
+Decoder-only Transformer following the LLaMA recipe at GPT-2-small scale: 12 layers, d_model 768, 12 heads, 4096-token context (1024 before v5), RoPE (theta 100,000 from v5), RMSNorm (pre-norm, computed in fp32), SwiGLU feed-forward (hidden 2048), no biases, tied input/output embeddings, GPT-2 BPE tokenizer (vocab padded to 50,304). 123.6M parameters.
 
 ## What's interesting in the code
 
 - **Time-budgeted LR schedule.** Kaggle sessions end at 12 h. The trainer times its first steps, then shrinks the cosine schedule so the decay finishes inside the budget instead of being cut off (`--time_budget_hours`).
 - **Exact data continuation.** The loader walks a seeded, rank-sharded shuffle of fixed chunks, so a resumed or continued run skips exactly the batches already trained on (`--resume`, `--data_offset_iters`).
-- **SFT with loss masking and packing.** Loss only on assistant tokens; whole conversations first-fit packed into 1024-token blocks (92% fill vs ~75% with naive packing).
+- **SFT with loss masking and packing.** Loss only on assistant tokens; whole conversations first-fit packed into fixed-length blocks (92% fill at 1,024 tokens, 99% at 4,096, vs ~75% with naive packing).
 - **Self-contained Kaggle notebooks.** `kaggle/build_notebook.py` embeds the source into a notebook that downloads and tokenizes its own data.
+- **Context extension.** `train.py --block_size 4096 --rope_theta 1e5` with `--init_from` extends a trained base; `scripts/eval_lm.py` measures loss at several context lengths so the gain and the forgetting are both visible.
 - **Verified exports.** `scripts/export_hf.py` converts to `LlamaForCausalLM` and refuses to save unless logits match the original exactly; the chat template is checked token-for-token against training.
 
 ## Layout
 
 ```
 src/llm/            model.py (GPT, RoPE, RMSNorm, SwiGLU, generate) · config.py · data.py · chat.py
-scripts/            prepare_data.py · prepare_sft.py · train.py · generate.py · export_hf.py · eval_hellaswag.py
-kaggle/             build_notebook.py (prepare / train / continue / sft notebooks)
+scripts/            prepare_data.py · prepare_india.py · prepare_sft.py · train.py · generate.py · export_hf.py
+                    eval_hellaswag.py · eval_lm.py (LM loss by context length) · eval_sft.py (chat versions on fixed val)
+kaggle/             build_notebook.py (prepare / train / continue / sft notebooks) · make_ctx4k.py · make_sft_v4.py · make_sft_v5.py
 webapp/             local test app: FastAPI server + React/TypeScript UI (chat, side-by-side completion, next-token inspector)
-hf_static/          the browser demo (Transformers.js in a Web Worker)
+hf_static/          the browser demo (Transformers.js in a Web Worker; pins the model commit, bump REVISION on release)
 hf_space/           Gradio version of the demo
 results/            hellaswag.json
 ```
